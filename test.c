@@ -9,6 +9,10 @@
 #define SIZE    (10*1024*1024)
 #define ROUND_UP(x, n)     (((x) + ((n) - 1)) & ~((n) - 1))
 
+int num_write_iters = 10000;
+size_t copy_size = 0;
+size_t copy_offset = 0;
+
 typedef struct gpuMemHandle 
 {
     CUdeviceptr ptr; 
@@ -69,6 +73,7 @@ void init_hbuf_walking_bit(uint32_t *h_buf, size_t size)
 
 void cuda_gdr_test(CUdeviceptr d_A, size_t size){
     int ret = 0;
+    int iter = 0;
     uint32_t *init_buf = NULL;
     CUresult result = cuMemAllocHost((void **)&init_buf, size);
     if (result != CUDA_SUCCESS){
@@ -87,7 +92,47 @@ void cuda_gdr_test(CUdeviceptr d_A, size_t size){
     if (ret != 0){
         printf("gdr_pin_buffer error!\n");
     }
-    gdr_unpin_buffer(g, mh);
+    
+    void *map_d_ptr  = NULL;
+    if (gdr_map(g, mh, &map_d_ptr, size) != 0){
+        printf("gdr_map error!\n");
+    }
+    
+    printf("map_d_ptr: %x\n", map_d_ptr);
+    
+    gdr_info_t info;
+    if (gdr_get_info(g, mh, &info) != 0){
+        printf("gdr_get_info error!\n");
+    }
+    
+    printf("info.va: %x\n", info.va);
+    printf("info.mapped_size: %x\n", info.mapped_size);
+    printf("info.page_size: %x\n", info.page_size);
+    printf("info.mapped: %x\n", info.mapped);
+    printf("info.wc_mapping: %x\n", info.wc_mapping);
+    
+    int off = info.va - d_A;
+    printf("page offset: %d\n", off);
+
+    uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
+    printf("user-space pointer: %x\n", buf_ptr);
+    
+    for (iter=0; iter<num_write_iters; ++iter)
+        gdr_copy_to_mapping(mh, buf_ptr + copy_offset/4, init_buf, copy_size);    
+    
+    if(gdr_unmap(g, mh, map_d_ptr, size) != 0){
+        printf("gdr_unmap error!\n");
+    }
+    
+    if(gdr_unpin_buffer(g, mh) != 0){
+       printf("gdr_unpin_buffer error!\n"); 
+    }
+    
+    if(gdr_close(g) != 0){
+       printf("gdr_close error!\n"); 
+    }
+
+    
     return;
 }
 
