@@ -70,25 +70,40 @@ void init_hbuf_walking_bit(uint32_t *h_buf, size_t size)
 void cuda_gdr_test(CUdeviceptr d_A, size_t size){
     int ret = 0;
     uint32_t *init_buf = NULL;
-    cuMemAllocHost((void **)&init_buf, size);
+    CUresult result = cuMemAllocHost((void **)&init_buf, size);
+    if (result != CUDA_SUCCESS){
+        const char *_err_name;
+        cuGetErrorName(result, &_err_name);
+        printf("CUDA error: %s\n", _err_name);
+    }
     init_hbuf_walking_bit(init_buf, size);
     // Create a gdr object
     gdr_t g = gdr_open();
     // Create a gdr handler
     gdr_mh_t mh;
-    //ret = gdr_pin_buffer(g, d_A, size, 0, 0, &mh);
+    
+    //start map and data copy
+    ret = gdr_pin_buffer(g, d_A, size, 0, 0, &mh);
     if (ret != 0){
         printf("gdr_pin_buffer error!\n");
     }
-    //gdr_unpin_buffer(g, mh);
+    gdr_unpin_buffer(g, mh);
     return;
 }
 
 int main( void ) {
+    cuInit(0);
+    CUdevice dev;
+    cuDeviceGet(&dev, 0);
+    CUcontext dev_ctx;
+    cuDevicePrimaryCtxRetain(&dev_ctx, dev);
+    cuCtxSetCurrent(dev_ctx);
     size_t size = 128*1024;
+    //size_t size = (_size + GPU_PAGE_SIZE - 1) & GPU_PAGE_MASK;
     CUdeviceptr d_A;
     gpu_mem_handle_t mhandle;
-    
+    gpu_mem_alloc(&mhandle, size, true, true);
+    d_A = mhandle.ptr;
     cuda_gdr_test(d_A, size);
     return 0;
 }
