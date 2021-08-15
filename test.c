@@ -5,12 +5,14 @@
 #include <cuda_runtime.h>
 #include <stdbool.h>
 #include <gdrapi.h>
-
+#include <fcntl.h>
+#include <unistd.h>
 #define SIZE    (10*1024*1024)
 #define ROUND_UP(x, n)     (((x) + ((n) - 1)) & ~((n) - 1))
 
+char pathname[] = "./data.txt";
 int num_write_iters = 10000;
-size_t copy_size = 0;
+size_t copy_size = 131072;
 size_t copy_offset = 0;
 
 typedef struct gpuMemHandle 
@@ -71,11 +73,38 @@ void init_hbuf_walking_bit(uint32_t *h_buf, size_t size)
         h_buf[w] = base_value ^ (1<< (w%32));
 }
 
+ssize_t pread_buf_from_file(uint32_t *buf){
+    ssize_t res = 0;
+    int f_id; // file descriptor
+    ssize_t nread;
+    f_id = open(pathname, O_RDWR | O_CREAT);
+    if (f_id == -1){
+        printf("open file error for %s\n", pathname);
+    }
+    int nbytes = 131072;
+    res = pread(f_id, buf, nbytes, 0); 
+    if (res == -1){
+        printf("pread error\n");
+    }
+    return res;
+}
+
+void wirte_file(){
+    int fd;
+    fd = open(pathname, O_WRONLY|O_CREAT);
+    if (fd == -1){ 
+        printf("open file error (write) for %s\n", pathname);
+    }
+    uint32_t test_buf = NULL;
+    test_buf = malloc();
+}
+
 void cuda_gdr_test(CUdeviceptr d_A, size_t size){
     int ret = 0;
     int iter = 0;
     uint32_t *init_buf = NULL;
-    CUresult result = cuMemAllocHost((void **)&init_buf, size);
+    //CUresult result = cuMemAllocHost((void **)&init_buf, size); 
+    CUresult result = cudaHostAlloc((void **)&init_buf, size, cudaHostAllocDefault);
     if (result != CUDA_SUCCESS){
         const char *_err_name;
         cuGetErrorName(result, &_err_name);
