@@ -96,7 +96,10 @@ void wirte_file(){
         printf("open file error (write) for %s\n", pathname);
     }
     uint32_t test_buf = NULL;
-    test_buf = malloc();
+    test_buf = (uint32_t *)malloc(copy_size); 
+    init_hbuf_walking_bit(test_buf, copy_size);
+    write(fd, test_buf, copy_size);
+    return;
 }
 
 void cuda_gdr_test(CUdeviceptr d_A, size_t size){
