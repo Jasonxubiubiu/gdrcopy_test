@@ -7,8 +7,10 @@
 #include <gdrapi.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <time.h>
 #define SIZE    (10*1024*1024)
 #define ROUND_UP(x, n)     (((x) + ((n) - 1)) & ~((n) - 1))
+#define MYCLOCK CLOCK_MONOTONIC
 
 char pathname[] = "./data.txt";
 int num_write_iters = 10000;
@@ -149,11 +151,26 @@ void cuda_gdr_test(CUdeviceptr d_A, size_t size){
     uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
     printf("user-space pointer: %x\n", buf_ptr);
     
-    if(pread_buf_from_file(buf_ptr) == -1){ 
-        printf("pread error!\n");
-    }
+    struct timespec beg, end;
+    clock_gettime(MYCLOCK, &beg);
+    
+    //for (iter=0; iter<num_write_iters; ++iter){
+        if(pread_buf_from_file(buf_ptr) == -1){ 
+            printf("pread error!\n");
+        }
+    //}
+    clock_gettime(MYCLOCK, &end);
+    double dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
+    printf("pread+gdrcopy time: %f ms\n", dt_ms);
+
+    clock_gettime(MYCLOCK, &beg);
     //for (iter=0; iter<num_write_iters; ++iter)
-    //    gdr_copy_to_mapping(mh, buf_ptr + copy_offset/4, init_buf, copy_size);    
+        
+        gdr_copy_to_mapping(mh, buf_ptr + copy_offset/4, init_buf, copy_size);    
+    
+    clock_gettime(MYCLOCK, &end);
+    dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
+    printf("cpu-gpu copy time: %f ms\n", dt_ms);
     
     if(gdr_unmap(g, mh, map_d_ptr, size) != 0){
         printf("gdr_unmap error!\n");
