@@ -89,7 +89,7 @@ ssize_t pread_buf_from_file(uint32_t *buf){
     return res;
 }
 
-void wirte_file(){
+void write_file(){
     int fd;
     fd = open(pathname, O_WRONLY|O_CREAT);
     if (fd == -1){ 
@@ -149,8 +149,11 @@ void cuda_gdr_test(CUdeviceptr d_A, size_t size){
     uint32_t *buf_ptr = (uint32_t *)((char *)map_d_ptr + off);
     printf("user-space pointer: %x\n", buf_ptr);
     
-    for (iter=0; iter<num_write_iters; ++iter)
-        gdr_copy_to_mapping(mh, buf_ptr + copy_offset/4, init_buf, copy_size);    
+    if(pread_buf_from_file(buf_ptr) == -1){ 
+        printf("pread error!\n");
+    }
+    //for (iter=0; iter<num_write_iters; ++iter)
+    //    gdr_copy_to_mapping(mh, buf_ptr + copy_offset/4, init_buf, copy_size);    
     
     if(gdr_unmap(g, mh, map_d_ptr, size) != 0){
         printf("gdr_unmap error!\n");
@@ -169,6 +172,7 @@ void cuda_gdr_test(CUdeviceptr d_A, size_t size){
 }
 
 int main( void ) {
+    write_file();
     cuInit(0);
     CUdevice dev;
     cuDeviceGet(&dev, 0);
