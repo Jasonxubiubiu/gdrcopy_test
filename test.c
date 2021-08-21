@@ -13,7 +13,7 @@
 #define MYCLOCK CLOCK_MONOTONIC
 
 char pathname[] = "./data.txt";
-int num_write_iters = 10000;
+int num_write_iters = 100;
 size_t copy_size = 131072;
 size_t copy_offset = 0;
 
@@ -154,23 +154,26 @@ void cuda_gdr_test(CUdeviceptr d_A, size_t size){
     struct timespec beg, end;
     clock_gettime(MYCLOCK, &beg);
     
-    //for (iter=0; iter<num_write_iters; ++iter){
+    for (iter=0; iter<num_write_iters; ++iter){
         if(pread_buf_from_file(buf_ptr) == -1){ 
             printf("pread error!\n");
         }
-    //}
+        else{ 
+            printf("pread success!\n");
+        }
+    }
     clock_gettime(MYCLOCK, &end);
     double dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
     printf("pread+gdrcopy time: %f ms\n", dt_ms);
 
-    clock_gettime(MYCLOCK, &beg);
+    //clock_gettime(MYCLOCK, &beg);
     //for (iter=0; iter<num_write_iters; ++iter)
         
-        gdr_copy_to_mapping(mh, buf_ptr + copy_offset/4, init_buf, copy_size);    
+       // gdr_copy_to_mapping(mh, buf_ptr + copy_offset/4, init_buf, copy_size);    
     
-    clock_gettime(MYCLOCK, &end);
-    dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
-    printf("cpu-gpu copy time: %f ms\n", dt_ms);
+    //clock_gettime(MYCLOCK, &end);
+    //dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
+    //printf("cpu-gpu copy time: %f ms\n", dt_ms);
     
     if(gdr_unmap(g, mh, map_d_ptr, size) != 0){
         printf("gdr_unmap error!\n");
@@ -185,6 +188,75 @@ void cuda_gdr_test(CUdeviceptr d_A, size_t size){
     }
 
     
+    return;
+}
+
+void traditional_data_transfer_between_ssd_and_gpu(){
+    int f_id;
+    uint32_t *dev_gpu;  
+    uint32_t trad_buf = NULL;
+    int res = 0;
+    struct timespec beg, end;
+    trad_buf = (uint32_t *)malloc(copy_size); 
+    f_id = open(pathname, O_RDWR | O_CREAT);
+    if (f_id == -1){
+        printf("open file error for %s\n", pathname);
+    }
+    int nbytes = 131072;
+    cudaMalloc((void **)&dev_gpu, copy_size);
+    int iter;
+    //Start time tick!
+    clock_gettime(MYCLOCK, &beg);
+    for (iter=0; iter<num_write_iters; ++iter){    
+        res = read(f_id, trad_buf, nbytes); 
+        if (res == -1){
+            printf("read error\n");
+        }
+        cudaMemcpy(dev_gpu, trad_buf, copy_size, cudaMemcpyHostToDevice);
+    }
+    clock_gettime(MYCLOCK, &end);
+    double dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
+    printf("Traditional data copy time: %f ms\n", dt_ms);
+    cudaFreeHost(trad_buf);
+    return;
+}
+
+
+void traditional_pin_data_transfer_between_ssd_and_gpu(){
+    int f_id;
+    uint32_t *dev_gpu;  
+    uint32_t trad_buf = NULL;
+    int res = 0;
+    struct timespec beg, end;
+    trad_buf = (uint32_t *)malloc(copy_size);
+     
+    //CUresult result = cudaHostAlloc((void **)&trad_buf, copy_size, cudaHostAllocDefault);
+    CUresult result = cudaHostRegister(trad_buf, copy_size, cudaHostRegisterDefault);
+    if (result != CUDA_SUCCESS){
+        const char *_err_name;
+        cuGetErrorName(result, &_err_name);
+        printf("CUDA error: %s\n", _err_name);
+    }
+
+    f_id = open(pathname, O_RDWR);
+    if (f_id == -1){
+        printf("open file error for %s\n", pathname);
+    }
+    int nbytes = 131072;
+    cudaMalloc((void **)&dev_gpu, copy_size);
+    int iter;
+    //Start time tick!
+    clock_gettime(MYCLOCK, &beg);
+    for (iter=0; iter<num_write_iters; ++iter){    
+        res = read(f_id, trad_buf, nbytes); 
+        if (res == -1){
+            printf("read error\n");
+        }
+       cudaMemcpy(dev_gpu, trad_buf, copy_size, cudaMemcpyHostToDevice);
+    }
+    clock_gettime(MYCLOCK, &end);
+    double dt_ms = (end.tv_nsec-beg.tv_nsec)/1000000.0 + (end.tv_sec-beg.tv_sec)*1000.0;
+    printf("Traditional pinned buffer data copy time: %f ms\n", dt_ms);
     return;
 }
 
@@ -203,5 +275,7 @@ int main( void ) {
     gpu_mem_alloc(&mhandle, size, true, true);
     d_A = mhandle.ptr;
     cuda_gdr_test(d_A, size);
+    traditional_data_transfer_between_ssd_and_gpu();
+    traditional_pin_data_transfer_between_ssd_and_gpu();
     return 0;
 }
